@@ -3,7 +3,7 @@
 from typing import Dict, List, Optional, Tuple
 
 from gpt_index.data_structs.data_structs import Node
-from gpt_index.embeddings.openai import BaseEmbedding
+from gpt_index.embeddings.base import BaseEmbedding, SimilarityMode
 
 
 def get_top_k_embeddings(
@@ -12,6 +12,7 @@ def get_top_k_embeddings(
     embeddings: List[List[float]],
     similarity_top_k: Optional[int] = None,
     embedding_ids: Optional[List] = None,
+    similarity_mode: Optional[SimilarityMode] = SimilarityMode.DEFAULT,
 ) -> Tuple[List[float], List]:
     """Get top nodes by similarity to the query."""
     if embedding_ids is None:
@@ -19,7 +20,7 @@ def get_top_k_embeddings(
 
     similarities = []
     for emb in embeddings:
-        similarity = embed_model.similarity(query_embedding, emb)
+        similarity = embed_model.similarity(query_embedding, emb, mode=similarity_mode)
         similarities.append(similarity)
 
     sorted_tups = sorted(
@@ -39,6 +40,11 @@ class SimilarityTracker:
 
     # TODO: smarter way to store this information
     lookup: Dict[str, float] = {}
+    mode: SimilarityMode = SimilarityMode.DEFAULT
+
+    def __init__(self, mode: Optional[SimilarityMode] = None) -> None:
+        if mode is not None:
+            self.mode = mode
 
     def _hash(self, node: Node) -> str:
         """Generate a unique key for each node."""

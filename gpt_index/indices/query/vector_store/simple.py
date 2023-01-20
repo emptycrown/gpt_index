@@ -35,8 +35,8 @@ class GPTSimpleVectorIndexQuery(BaseGPTVectorStoreIndexQuery[SimpleIndexDict]):
     def _get_nodes_for_response(
         self,
         query_str: str,
+        similarity_tracker: SimilarityTracker,
         verbose: bool = False,
-        similarity_tracker: Optional[SimilarityTracker] = None,
     ) -> List[Node]:
         """Get nodes for response."""
         # TODO: consolidate with get_query_text_embedding_similarities
@@ -51,12 +51,12 @@ class GPTSimpleVectorIndexQuery(BaseGPTVectorStoreIndexQuery[SimpleIndexDict]):
             embeddings,
             similarity_top_k=self.similarity_top_k,
             embedding_ids=node_ids,
+            similarity_mode=similarity_tracker.mode,
         )
         top_k_nodes = self._index_struct.get_nodes(top_ids)
 
-        if similarity_tracker is not None:
-            for node, similarity in zip(top_k_nodes, top_similarities):
-                similarity_tracker.add(node, similarity)
+        for node, similarity in zip(top_k_nodes, top_similarities):
+            similarity_tracker.add(node, similarity)
 
         # print verbose output
         if verbose:
