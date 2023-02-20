@@ -7,6 +7,7 @@ from gpt_index.data_structs.data_structs import KG, Node
 from gpt_index.indices.keyword_table.utils import extract_keywords_given_response
 from gpt_index.indices.query.base import BaseGPTIndexQuery
 from gpt_index.indices.query.embedding_utils import SimilarityTracker
+from gpt_index.indices.query.schema import QueryBundle
 from gpt_index.indices.utils import truncate_text
 from gpt_index.prompts.default_prompts import DEFAULT_QUERY_KEYWORD_EXTRACT_TEMPLATE
 from gpt_index.prompts.prompts import QueryKeywordExtractPrompt
@@ -62,18 +63,20 @@ class GPTKGTableQuery(BaseGPTIndexQuery[KG]):
 
     def _get_nodes_for_response(
         self,
-        query_str: str,
+        query_bundle: QueryBundle,
         similarity_tracker: Optional[SimilarityTracker] = None,
     ) -> List[Node]:
         """Get nodes for response."""
-        logging.info(f"> Starting query: {query_str}")
-        keywords = self._get_keywords(query_str)
+        logging.info(f"> Starting query: {query_bundle.query_str}")
+        keywords = self._get_keywords(query_bundle.query_str)
         logging.info(f"> Query keywords: {keywords}")
         rel_texts = []
+        cur_rel_map = {}
         chunk_indices_count: Dict[str, int] = defaultdict(int)
         for keyword in keywords:
             cur_rel_texts = self.index_struct.get_rel_map_texts(keyword)
             rel_texts.extend(cur_rel_texts)
+            cur_rel_map[keyword] = self.index_struct.get_rel_map_tuples(keyword)
             if self._include_text:
                 for node_id in self.index_struct.get_node_ids(keyword):
                     chunk_indices_count[node_id] += 1
@@ -101,10 +104,24 @@ class GPTKGTableQuery(BaseGPTIndexQuery[KG]):
             "The following are knowledge triplets "
             "in the form of (subset, predicate, object):"
         )
-        rel_texts = [rel_initial_text] + rel_texts
-        rel_text_node = Node(text="\n".join(rel_texts))
-        rel_info_text = "\n".join(rel_texts)
+        rel_info = [rel_initial_text] + rel_texts
+        rel_node_info = {
+            "kg_rel_texts": rel_texts,
+            "kg_rel_map": cur_rel_map,
+        }
+        rel_text_node = Node(text="\n".join(rel_info), node_info=rel_node_info)
+        rel_info_text = "\n".join(rel_info)
         logging.info(f"> Extracted relationships: {rel_info_text}")
         sorted_nodes.append(rel_text_node)
 
         return sorted_nodes
+
+    def _get_extra_info_for_response(
+        self, nodes: List[Node]
+    ) -> Optional[Dict[str, Any]]:
+        """Get extra info for response."""
+        for node in nodes:
+            if node.node_info is None or "kg_rel_map" not in node.node_info:
+                continue
+            return node.node_info
+        raise ValueError("kg_rel_map must be found in at least one Node.")
